@@ -1,0 +1,7 @@
+[[items]]
+icon = "/tmp/ubuntu.ico"
+domain = "ubuntu"
+
+[[items]]
+icon = "/tmp/arch.ico"
+domain = "arch"
