@@ -1,3 +1,4 @@
-toml
+libvirt-python
 pydantic
 PySide2
+toml
