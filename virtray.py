@@ -106,25 +106,23 @@ class WindowManager:
 
 
 class LibvirtManager:
-    def __init__(self) -> None:
+    def __init__(self, show_message: Callable[[str], None] = print) -> None:
         self.conn = libvirt.open("qemu:///system")
-
-        for dom in self.conn.listAllDomains():
-            print(f"{dom.name()} {dom.ID()}")
+        self.show_message = show_message
 
     def get_save_path(self, domain: str) -> str:
         return f"/var/lib/libvirt/qemu/save/{domain}.save"
 
     def save(self, domain: str) -> None:
-        print(f"saving {domain}")
+        self.show_message(f"saving {domain}")
         dom = self.conn.lookupByName(domain)
         dom.save(self.get_save_path(domain))
-        print(f"saved to {self.get_save_path(domain)}")
+        self.show_message(f"saved to {self.get_save_path(domain)}")
 
     def restore(self, domain: str) -> None:
-        print(f"restoring {domain}")
+        self.show_message(f"restoring {domain}")
         self.conn.restore(self.get_save_path(domain))
-        print(f"restored from {self.get_save_path(domain)}")
+        self.show_message(f"restored from {self.get_save_path(domain)}")
 
     def is_saved(self, domain: str) -> bool:
         return os.path.exists(self.get_save_path(domain))
@@ -134,16 +132,16 @@ class LibvirtManager:
         return dom.isActive() == 1
 
     def start(self, domain: str) -> None:
-        print(f"starting {domain}")
+        self.show_message(f"starting {domain}")
         dom = self.conn.lookupByName(domain)
         dom.create()
-        print(f"started {domain}")
+        self.show_message(f"started {domain}")
 
     def force_shutdown(self, domain: str) -> None:
-        print(f"force shutting down {domain}")
+        self.show_message(f"force shutting down {domain}")
         dom = self.conn.lookupByName(domain)
         dom.destroy()
-        print(f"force shut down {domain}")
+        self.show_message(f"force shut down {domain}")
 
 
 class VirtTray:
@@ -165,33 +163,36 @@ class VirtTray:
     def create_tray_icon(self, item: Item) -> None:
         icon = QIcon(item.icon)
         trayIcon = QSystemTrayIcon(icon, self.app)
-        trayIcon.setToolTip("Click to execute")
+        trayIcon.setToolTip(item.domain)
 
         menu = QMenu()
+        virt = LibvirtManager(
+            show_message=lambda msg: trayIcon.showMessage(
+                "Virtray", msg, icon=QSystemTrayIcon.NoIcon, msecs=3000
+            )
+        )
 
         startAction = menu.addAction("Start")
         # set to enabled if not running
-        startAction.setEnabled(not self.virt.is_running(item.domain))
-        startAction.triggered.connect(lambda: self.virt.start(item.domain))
+        startAction.setEnabled(not virt.is_running(item.domain))
+        startAction.triggered.connect(lambda: virt.start(item.domain))
 
         forceShutdownAction = menu.addAction("Force Shutdown")
         # set to enabled if running
-        forceShutdownAction.setEnabled(self.virt.is_running(item.domain))
-        forceShutdownAction.triggered.connect(
-            lambda: self.virt.force_shutdown(item.domain)
-        )
+        forceShutdownAction.setEnabled(virt.is_running(item.domain))
+        forceShutdownAction.triggered.connect(lambda: virt.force_shutdown(item.domain))
 
         saveAction = menu.addAction("Save")
         # set to enabled if running and not saved
         saveAction.setEnabled(
-            self.virt.is_running(item.domain) and not self.virt.is_saved(item.domain)
+            virt.is_running(item.domain) and not virt.is_saved(item.domain)
         )
-        saveAction.triggered.connect(lambda: self.virt.save(item.domain))
+        saveAction.triggered.connect(lambda: virt.save(item.domain))
 
         restoreAction = menu.addAction("Restore")
         # set to enabled if saved
-        restoreAction.setEnabled(self.virt.is_saved(item.domain))
-        restoreAction.triggered.connect(lambda: self.virt.restore(item.domain))
+        restoreAction.setEnabled(virt.is_saved(item.domain))
+        restoreAction.triggered.connect(lambda: virt.restore(item.domain))
 
         # separator
         menu.addSeparator()
@@ -221,13 +222,12 @@ class VirtTray:
             item=item,
         ):
             print("update_menu")
-            startAction.setEnabled(not self.virt.is_running(item.domain))
-            forceShutdownAction.setEnabled(self.virt.is_running(item.domain))
+            startAction.setEnabled(not virt.is_running(item.domain))
+            forceShutdownAction.setEnabled(virt.is_running(item.domain))
             saveAction.setEnabled(
-                self.virt.is_running(item.domain)
-                and not self.virt.is_saved(item.domain)
+                virt.is_running(item.domain) and not virt.is_saved(item.domain)
             )
-            restoreAction.setEnabled(self.virt.is_saved(item.domain))
+            restoreAction.setEnabled(virt.is_saved(item.domain))
 
         menu.aboutToShow.connect(update_menu)
 
